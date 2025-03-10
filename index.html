@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <button id="myButton">Click me</button>
+    <script>
+      const obj1 = {
+        value: 'obj1 value',
+        func1: function () {
+          console.log(this.value) // obj2 value
+          const arrowFunc = () => {
+            console.log(this.value)  // obj2 value
+            const nestedFunc = function () {
+              console.log(this.value) // obj2 value
+            }.bind(this)
+            nestedFunc()
+          }
+          arrowFunc()
+        }
+      }
+
+      const obj2 = {
+        value: 'obj2 value'
+      }
+
+      const sharedFunc = obj1.func1
+      sharedFunc.call(obj2)
+    </script>
+  </body>
+</html>

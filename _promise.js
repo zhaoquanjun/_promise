@@ -1,4 +1,3 @@
-
 const PENDING = 'pending'
 const FULFILLED = 'fulfilled'
 const REJECTED = 'rejected'
@@ -52,17 +51,39 @@ class MyPromise {
     }
   }
 
+
+  // 推入微队列的方法
+  // 考虑兼容性
+  #pushMicrotask(fn) {
+    // 支持 queueMicrotask Api
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(fn)
+      // Node 环境  支持 process.nextTick
+    } else if (typeof process === 'object' && process.nextTick.then === 'function') {
+      process.nextTick(fn)
+    } else if (typeof MutationObserver === 'function') {
+      // 浏览器环境
+      const observer = new MutationObserver(fn)
+      const node = document.createTextNode('')
+      observer.observe(node, { characterData: true })
+      node.data = '1'
+    } else {
+      // setTimeout
+      setTimeout(fn, 0)
+    }
+  }
+
   #callback(cb, resolve, reject) {
     if (typeof cb !== 'function') {
       // 没有心的处理 透传状态
       const settled = this.#state === FULFILLED ? resolve : reject
-      queueMicrotask(() => settled(this.#result))
+      this.#pushMicrotask(() => settled(this.#result))
       return
     }
 
     // 推入异步队列一个方法
     // 处理回调函数是异步函数的情况
-    queueMicrotask(async () => {
+    this.#pushMicrotask(async () => {
       try {
         const res = await cb(this.#result)
         resolve(res)
@@ -70,22 +91,6 @@ class MyPromise {
         reject(err)
       }
     })
-  }
-
-  #isAsyncFunction(func) {
-    // 首先检查函数是否通过 async 关键字定义
-    if (func.constructor.name === 'AsyncFunction') {
-      return true
-    }
-
-    try {
-      const result = func()
-      // 检查函数返回值是否为 Promise 对象
-      return result instanceof Promise
-    } catch (error) {
-      // 如果函数执行出错，返回 false
-      return false
-    }
   }
 
   // 暴露出去的方法
@@ -106,6 +111,9 @@ class MyPromise {
     })
   }
 }
+
+
+
 
 const p = new MyPromise((resolve, reject) => {
   resolve('success')
