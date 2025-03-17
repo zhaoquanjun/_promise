@@ -1,17 +1,23 @@
+import { isPromise } from './isPromise.js'
+
 const PENDING = 'pending'
 const FULFILLED = 'fulfilled'
 const REJECTED = 'rejected'
 
 class MyPromise {
+  [['name']] = 'MyPromise'
+  test = '123'
   #state = PENDING
   #result = undefined
   #thenables = []
+
   constructor(excutor) {
     // resolver must be a function
     if (typeof excutor !== 'function') {
       throw new TypeError(`MyPromise resolver ${excutor} is not a function`)
     }
 
+    // resolve reject 放在里面是为了this指针问题 避免this绑定的事
     const resolve = data => {
       this.#changeState(FULFILLED, data)
     }
@@ -51,6 +57,25 @@ class MyPromise {
     }
   }
 
+  #callback(cb, resolve, reject) {
+    if (typeof cb !== 'function') {
+      // 没有新的处理 透传状态
+      const settled = this.#state === FULFILLED ? resolve : reject
+      this.#pushMicrotask(() => settled(this.#result))
+      return
+    }
+
+    // 推入异步队列一个方法
+    // 处理回调函数是异步函数的情况
+    this.#pushMicrotask(async () => {
+      try {
+        const res = await cb(this.#result)
+        resolve(res)
+      } catch (err) {
+        reject(err)
+      }
+    })
+  }
 
   // 推入微队列的方法
   // 考虑兼容性
@@ -73,27 +98,10 @@ class MyPromise {
     }
   }
 
-  #callback(cb, resolve, reject) {
-    if (typeof cb !== 'function') {
-      // 没有心的处理 透传状态
-      const settled = this.#state === FULFILLED ? resolve : reject
-      this.#pushMicrotask(() => settled(this.#result))
-      return
-    }
-
-    // 推入异步队列一个方法
-    // 处理回调函数是异步函数的情况
-    this.#pushMicrotask(async () => {
-      try {
-        const res = await cb(this.#result)
-        resolve(res)
-      } catch (err) {
-        reject(err)
-      }
-    })
-  }
-
-  // 暴露出去的方法
+  /**
+   * @name 暴露出去的方法
+   */
+  // then
   then(onFulfilled, onRejected) {
     // 链式调用 要返回实例
     return new MyPromise((resolve, reject) => {
@@ -110,33 +118,44 @@ class MyPromise {
       this.#run()
     })
   }
+  catch(errorHandler) {
+    return this.then(undefined, errorHandler)
+  }
+  finally(finalyHandler) {
+    return this.then(finalyHandler, undefined)
+  }
+  // all
+  static all(promises) {
+    let allResults = []
+    let completeCount = 0
+    return new MyPromise((resolve, reject) => {
+      if (promises.length === 0) {
+        resolve(allResults)
+      }
+
+      promises.forEach((item, index) => {
+        if (!isPromise(item)) {
+          allResults[index] = item
+          completeCount++
+          if (completeCount === promises.length) {
+            resolve(allResults)
+          }
+          return
+        }
+       
+        item.then(response => {
+          allResults[index] = response
+          completeCount++
+          if (completeCount === promises.length) {
+            resolve(allResults)
+          }
+        }).catch(err => {
+          console.log('err', err)
+          reject(err)
+        })
+      })
+    })
+  }
 }
 
-
-
-
-const p = new MyPromise((resolve, reject) => {
-  resolve('success')
-})
-  .then(res => {
-    console.log(res, 'then1')
-    return res + '111'
-  })
-  .then(async res => {
-    console.log(res, 'then2')
-    await setTimeout(() => {
-      console.log('setTimeout' + res + '222')
-    }, 0)
-    return res + '222'
-  })
-
-  .then(async res => {
-    console.log(res, 'then2.5')
-    return new Promise((resolve, reject) => {
-      resolve(res + '222.5')
-    })
-  })
-  .then(res => {
-    console.log(res, 'then3')
-    return res + '333'
-  })
+export default MyPromise
